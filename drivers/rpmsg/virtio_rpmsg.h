@@ -19,17 +19,24 @@
 #ifndef VIRTIO_RPMSG_H
 #define VIRTIO_RPMSG_H
 
-/*
- * RPMSG_MAX_IOV_SIZE should be MAX_BUF_SIZE/PAGE_SIZE + 1
- */
 #define	RPMSG_MAX_IOV_SIZE	32
 #define RPMSG_VAR_VIRTQUEUE_NUM	32
-#define MAX_BUF_SIZE	(64 * 1024)
+
+/*
+ * RPMSG_MAX_SG_SIZE is the max size of scatter-gather list in buf_info used
+ * for variable sized transmits. On a single rpmsg_{try}send{to, _offchannel}
+ * request, we limit the maximum sent buffer size to 64K for security reasons.
+ * As the variable size buffer allocations in this driver doesn't mandates a
+ * page alignment, a 64K buffer allocation can span up 17 Pages.
+ */
+#define MAX_SBUF_SIZE		(64 * 1024)
+#define MAX_BUF_SIZE		(64 * 1024)
+#define RPMSG_MAX_SG_SIZE	((MAX_SBUF_SIZE/PAGE_SIZE) + 1)
 
 struct buf_info {
 	size_t len;
 	void *addr;
-	struct scatterlist sg[RPMSG_VAR_VIRTQUEUE_NUM];
+	struct scatterlist sg[RPMSG_MAX_SG_SIZE];
 };
 
 struct pool_info {
@@ -97,6 +104,7 @@ struct virtproc_info {
 	dma_addr_t vbufs_dma;
 	size_t pool_size;
 	struct device *pdev;
+	int max_frees;
 	bool is_bsp;
 };
 
@@ -216,6 +224,8 @@ void create_dummy_rpmsg_ept(struct virtproc_info *vrp,
 void rpmsg_dummy_ap_var_size_recv_work(struct virtproc_info *vrp);
 int rpmsg_pack_sg_list(struct scatterlist *sg, int start, int limit, char *data,
 		int count);
+int rpmsg_pack_sg_list(struct scatterlist *sg, int start, int limit,
+		char *data, int count);
 
 /* routines in virtio_rpmsg_bus */
 void __ept_release(struct kref *kref);

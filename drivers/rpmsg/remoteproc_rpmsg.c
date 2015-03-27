@@ -50,7 +50,7 @@ void *__rpmsg_ptov(struct virtproc_info *vrp, unsigned long addr, size_t len)
 	 */
 	if(!rp_info->valid && vrp->is_bsp) {
 		//rpmsg_virtio_cfg_changed(vrp);
-		va = phys_to_virt(addr);
+		va = (unsigned long)phys_to_virt(addr);
 		return va;
 	}
 
@@ -71,9 +71,11 @@ void __rpmsg_pool_check(struct pool_info *p_info, void *va, size_t len)
 
 	BUG_ON(!va);
 	BUG_ON(!p_info);
-	BUG_ON(va < p_info->va_start || (va + len) > p_info->va_end);
+	BUG_ON((unsigned long)va < p_info->va_start || (unsigned long)(va + len) >
+			p_info->va_end);
 	phy_addr = __pa(va);
-	BUG_ON(phy_addr < p_info->pa_start || (phy_addr + len) > p_info->pa_end);
+	BUG_ON(phy_addr < p_info->pa_start ||
+			(phy_addr + len) > (unsigned long)p_info->pa_end);
 }
 
 void __rpmsg_update_pool_info(struct pool_info *p_info, void *va,
@@ -140,7 +142,7 @@ void rpmsg_cfg_update_pool_info(struct virtproc_info *vrp, unsigned len)
 	struct fw_rsc_vdev_buf_desc desc;
 	unsigned offset;
 
-	desc.addr = (unsigned long)vrp->vbufs_dma;
+	desc.addr = (unsigned long)vrp->bufs_dma;
 	desc.len = len;
 
 	BUG_ON(desc.addr == 0);
@@ -291,49 +293,6 @@ static struct rpmsg_hdr *rpmsg_copy_from_user(struct rpmsg_req *req)
 	msg->reserved = 0;
 	memcpy(msg->data, req->usend.data, req->usend.len);
 	return msg;
-}
-
-/* How many bytes left in this page. */
-static unsigned int rest_of_page(void *data)
-{
-	return PAGE_SIZE - ((unsigned long)data % PAGE_SIZE);
-}
-
-/**
- * rpmsg_pack_sg_list - pack a scatter gather list from a linear buffer
- * @sg: scatter/gather list to pack into
- * @start: which segment of the sg_list to start at
- * @limit: maximum segment to pack data to
- * @data: data to pack into scatter/gather list
- * @count: amount of data to pack into the scatter/gather list
- *
- * sg_lists have multiple segments of various sizes.  This will pack
- * arbitrary data into an existing scatter gather list, segmenting the
- * data as necessary within constraints.
- *
- * Stolen function from 9p Virtio driver.
- */
-
-int rpmsg_pack_sg_list(struct scatterlist *sg, int start,
-			int limit, char *data, int count)
-{
-	int s;
-	int index = start;
-
-	while (count) {
-		s = rest_of_page(data);
-		if (s > count)
-			s = count;
-		BUG_ON(index > limit);
-		/* Make sure we don't terminate early. */
-		sg_unmark_end(&sg[index]);
-		sg_set_buf(&sg[index++], data, s);
-		count -= s;
-		data += s;
-	}
-	if (index-start)
-		sg_mark_end(&sg[index - 1]);
-	return index-start;
 }
 
 static void rpmsg_free_buf(void *data, unsigned char ptype)
